@@ -1,0 +1,44 @@
+---
+title: "BST260FinalProject"
+author: "Auyon Ghosh"
+date: "12/8/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#Load relevant packages
+```{r}
+
+library(tidyverse)
+library(RCurl)
+
+```
+
+#Read in data
+```{r}
+
+NCHSCausesOfDeath <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/NCHS_-_Leading_Causes_of_Death__United_States.csv")
+
+PalmerDroughtIndex <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Palmer_Drought_Severity_Index__1895-2016.csv")
+
+AirQualityMeasures <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Air_Quality_Measures_on_the_National_Environmental_Health_Tracking_Network.csv")
+
+```
+
+#Select columns and rows of interest from each dataset
+```{r}
+
+##Limit causes of death to chronic lung disease
+
+CLRDdeaths <- NCHSCausesOfDeath %>% 
+  filter(Cause.Name=='CLRD') %>%
+  select(Year,Cause.Name,State,Deaths,Age.adjusted.Death.Rate) %>%
+  rename("Cause name"=Cause.Name, "Age adjusted death rate"=Age.adjusted.Death.Rate)
+
+##Limit Drought Index to years with mortality data
+ModernPalmer <- PalmerDroughtIndex %>% filter(year %in% )
+
+```
