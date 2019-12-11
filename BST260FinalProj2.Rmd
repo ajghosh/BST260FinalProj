@@ -1,0 +1,364 @@
+---
+output: html_document
+---
+# Measuring the Effects of Climate Change on Chronic Respiratory Diseases
+
+Final project for BST260 Fall 2019 by Auyon Ghosh, MD
+
+## Overview
+
+### Introduction
+
+As a pulmonologist, I regularly counsel patients on exposures that can cause and worsen chronic lung diseases. These include exposures that are behavioral, like smoking, and those that are environmental, like mold and heavy metals. In addition, climate change and its associated factors represent a growing source of environmental exposures related to lung disease. The mechanism of climate change in the development and exacerbation of disease has been previously studied. However, the economic and public health effects of climate change have been less thoroughly investigated.
+
+### Project objective
+
+The goal of this project is not to associate factors related to climate change, such as air pollution, to chronic lung diseases – the role of air pollution and other factors in the course of chronic lung diseases has been [well established](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4857606/pdf/nihms781387.pdf). Instead, I aim to explore the temporal and geographic effects of climate change on chronic lung diseases. Specifically, I intend to investigate how factors associated with climate change modify the regional effects on mortality due to chronic lung diseases over time. 
+
+Study questions:
+
+•	Over the last several years, many states in the western US have been plagued by drought conditions that have led to wildfires. Do droughts themselves lead to worse outcomes related to chronic lung diseases?
+•	Have wildfires led to worse outcomes related to chronic lung diseases in these states (relative to unaffected states)? In neighboring states/in these regions?
+•	Pollution has increased as well. Do states with more pollution/worse air quality have worse outcomes related to chronic lung diseases? 
+
+### Datasets
+
+The Center for Disease Control (CDC) maintains a [repository](https://www.cdc.gov/nchs/data_access/ftp_data.htm) of datasets available for public use, including the [National Vital Statistics System](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm), which publishes a cause-specific mortality dataset, as well as measures of [drought severity](https://data.cdc.gov/Environmental-Health-Toxicology/Palmer-Drought-Severity-Index-1895-2016/en5r-5ds4), [air quality](https://data.cdc.gov/Environmental-Health-Toxicology/Air-Quality-Measures-on-the-National-Environmental/cjae-szjv), and [smoking rates](https://www.cdc.gov/statesystem/cigaretteuseadult.html). The [National Interagency Fire Center](https://www.nifc.gov/fireInfo/fireInfo_statistics.html) aggregates and publishes yearly datasets on wildfires.
+
+## Data Analyses
+
+```{r, message=FALSE, echo=FALSE}
+
+library(tidyverse)
+library(RCurl)
+library(readxl)
+library(ggplot2)
+library(dslabs)
+library(broom)
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Read in datasets
+
+NCHSCausesOfDeath <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/NCHS_-_Leading_Causes_of_Death__United_States.csv")
+
+PalmerDroughtIndex <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Palmer_Drought_Severity_Index__1895-2016.csv")
+
+AirQualityMeasures <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Air_Quality_Measures_on_the_National_Environmental_Health_Tracking_Network.csv")
+
+StateFIPS <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/State%20FIPS%20codes.csv",header = F)
+
+Wildfires <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Wildfires.csv")
+
+data(murders)
+
+currentsmoking <- read.csv("https://raw.githubusercontent.com/ajghosh/BST260FinalProj/master/Current%20Cigarette%20Use%20Among%20Adults%20(Behavior%20Risk%20Factor%20Surveillance%20System)%202017.csv")
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Chronic Lower Respiratory Disease dataset
+
+##Select variables of interest from murders
+murders <- murders %>% select(state,region)
+
+#Select variables of interest, isolating only chronic lower respiratory disease death rates
+CLRDdeaths <- NCHSCausesOfDeath %>% 
+  filter(Cause.Name=='CLRD') %>%
+  select(Year,Cause.Name,State,Deaths,Age.adjusted.Death.Rate) %>%
+  rename("Cause name"=Cause.Name,"deathrate"=Age.adjusted.Death.Rate,"state"=State,"year"=Year)
+
+#Combine CLRD data with region data from murders dataset
+CLRDdeaths <- left_join(CLRDdeaths,murders, by="state")
+CLRDdeaths$region <- CLRDdeaths$region %>% replace_na('United States')
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Wildfires dataset
+
+##Selecting variables of interest
+Wildfires <- Wildfires %>% rename("wildfires"=Number.of.fires,"state"=State,"acres"=Number.of.acres.burned,"year"=Year)
+
+##Merging with murders for region information
+Wildfires <- left_join(Wildfires,murders, by="state")
+
+##Further cleaning
+Wildfires <- na.omit(Wildfires)
+Wildfires <- Wildfires %>% filter(!year==2018)
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Palmer Drought Severity Index dataset
+
+##Select variables of interest from PDSI dataset
+ModernPalmer <- PalmerDroughtIndex %>% filter(year %in% 1999:2017)
+
+##Create monthly then yearly PDSI averages
+MonthlyPalmer <- ModernPalmer %>% group_by(statefips,year,month) %>% summarize(monthPDSI = mean(pdsi))
+YearlyPalmer <- MonthlyPalmer %>% group_by(statefips,year) %>% summarize(yearPDSI = mean(monthPDSI))
+
+##Clean up StateFIPS dataset
+StateFIPS <- StateFIPS %>% rename("statefips"=V3,"state"=V1,"abb"=V2)
+
+##Merge StateFIPS and PDSI datasets
+YearlyPalmerState <- left_join(YearlyPalmer,StateFIPS, by="statefips")
+YearlyPalmerState <- YearlyPalmerState %>% select(year,state,statefips,yearPDSI)
+
+##Clean up final PDSI dataset
+YearlyPalmerState <- left_join(YearlyPalmerState,murders, by="state")
+YearlyPalmerState$state <- YearlyPalmerState$state %>% replace_na('DC')
+YearlyPalmerState$region <-YearlyPalmerState$region %>% replace_na('South')
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Air quality dataset
+
+##Clean up air quality dataset
+AirQualityMeasures<- AirQualityMeasures %>% filter(MeasureType=="Average") %>%  select(StateName,ReportYear,Value) %>% rename("state"=StateName,"year"=ReportYear,"avgPM"=Value) %>% group_by(state,year) %>% summarize(SavgPM = mean(avgPM))
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Smoking dataset
+
+#Selecting variables of interest and cleaning up dataset
+currentsmoking <- currentsmoking %>% select(Location.Desc,Data.Value) %>% rename("state"=Location.Desc,"smoking"=Data.Value)
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Making a single analysis dataset
+
+##Combining death data and air quality data
+respfireairqual <- left_join(CLRDdeaths,AirQualityMeasures,by=c("state","year"))
+
+##Adding wildfire data
+respfireairqual <- left_join(respfireairqual,Wildfires,by=c("state","year")) 
+respfireairqual <- respfireairqual %>% select(c(year,state,deathrate,region.x,SavgPM,wildfires,acres)) %>% rename("region"=region.x,"avgpm"=SavgPM)
+
+##Adding PDSI data
+respfireairqual <- left_join(respfireairqual,YearlyPalmerState,by=c("state","year","region"))
+respfireairqual <- respfireairqual %>% select(year,state,region,deathrate,avgpm,wildfires,acres,yearPDSI)
+
+##Adding 2018 smoking rates
+respfireairqual <- left_join(respfireairqual,currentsmoking,by="state")
+
+```
+
+### Regional trends in chronic lower respiratory disease mortality
+
+The CDC/National Center for Health Statistics publishes a dataset that presents the age-adjusted death rates for the ten leading causes of death from 1999 to 2017. The data are based on information from death certificates filed in the 50 states and the District of Columbia. The age-adjusted death rates are presented as per 100,000 population. For the purposes of the present study, we limited the dataset to death rates due to Chronic Lower Respiratory Disease. In addition, we included region designation from the 'murders' dataset from the dslabs package to aid in interpretability.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+#Line graph of deaths rates by region over time
+CLRDdeaths %>% filter(state != "United States") %>% group_by(region,year) %>% summarize(Rdeathrate = mean(deathrate)) %>% ggplot() +
+  geom_line(aes(year,Rdeathrate,color=region), size=2) +
+  xlab("Year") +
+  ylab("Age-adjusted death rate (per 100,000 population)") +
+  theme_bw() +
+  ggtitle("Age-adjusted death rates of chronic lower respiratory disease by region")
+
+```
+
+The graph displays the trends in chronic lower respiratory disease death rates by region over the last ~20 years. Interestingly, the death rate for chronic lower respiratory disease has decreased in the Northeast and West regions, while it has remained mostly stable in the South and North Central regions. 
+
+### Regional Trends in climate related variables
+
+
+#### Wildfires
+
+The National Interagency Fire Center (NIFC) publishes a dataset which presents an aggregate of reports from several national, regional, and state agencies. The dataset includes the number of wildfires and the number of acres burned, in both wildland/spontaneous and prescriptive/preventative fires. The NIFC maintains historical datasets for year-end fire statistics up to 2002, but only switched to html/csv datasets in 2009 from pdfs, limiting the data available for this study to 2009 to 2017.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+#Bar graphs of number of wildfires by state over 2010, 2014, 2017
+Wildfires %>% filter(year %in% c(2010,2014,2017)) %>% mutate(state = reorder(state,wildfires, FUN = median)) %>% 
+  ggplot() +
+  geom_col(aes(state,wildfires,fill=region)) +
+  theme(axis.text.x = element_text(angle = 90),panel.background = element_rect(fill = NA)) +
+  facet_grid(year~.) +
+  ylab("Number of wildfires") +
+  xlab("State") +
+  ggtitle("Number of Wildfires by state in 2010, 2014, & 2017")
+
+```
+
+The figure above shows that 4 out of the top 5 states with the most wildfires are in the South region. In the top 10 states with the most wildfires, 7 states are from the South region and the other 3 are in the West region. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+#Bar graphs of number of acres burned by state over 2010, 2014, 2017
+Wildfires %>% filter(year %in% c(2010,2014,2017)) %>% mutate(state = reorder(state,acres, FUN = median)) %>% 
+  ggplot() +
+  geom_col(aes(state,acres,fill=region)) +
+  theme(axis.text.x = element_text(angle = 90),panel.background = element_rect(fill = NA)) +
+  facet_grid(year~.) +
+  ylab("Number of acres burned") +
+  scale_y_continuous(trans = "log10") +
+  xlab("State") +
+  ggtitle("Number of Acres burned by state in 2010, 2014, & 2017")
+
+```
+
+In contrast, the figure above shows that the top 5 states by number of acres burned are all from the West. But again, the top 10 states by number of acres burned are only from the South and West regions. Therefore, regardless of the measure used to quantify the burden of wildfires, these data demonstrate that the South and West regions of the US are the most affected by wildfires.
+
+
+#### Drought Severity
+
+The Environmental Public Health Tracking Network publishes a dataset (via the CDC) that tracks the monthly [Palmer Drough Sverity Index (PDSI)](https://en.wikipedia.org/wiki/Palmer_drought_index) at the county and state level. The PDSI is based on soil moisture, with negative numbers representing drought and -4 as the minimum, representing "extreme drought". The dataset contains data from 1895 to 2016, but given the scope of the study, we used only data from 1999 to 2013. In addition, while the dataset provides county level data, given the lack of similar granularity in the other datasets, state level data was used.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+#Bar graph of yearly PDSI averages by state for 2000, 2004, 2008, and 2012
+respfireairqual %>% filter(year %in% c(2000,2004,2008,2012)) %>% mutate(state = reorder(state,yearPDSI, FUN = median)) %>% 
+  ggplot() +
+  geom_col(aes(state,yearPDSI,fill=region)) +
+  theme(axis.text.x = element_text(angle = 90), panel.background = element_rect(fill = NA)) +
+  facet_grid(year~.) +
+  xlab("State") +
+  ylab("Average yearly PDSI") +
+  ggtitle("Average Yearly PDSI by state in 2000, 2004, 2008, & 2012")
+
+```
+
+While there is some variation between the years, the graph above shows that the states in the South and West regions consistently have the most negative PDSI. This suggests that these regions have the most severe drought conditions, which is congruent with the wildfire data.
+
+
+#### Air Quality
+
+The Environmental Protection Agency (EPA) presents air polluation data as measured by particulate matter concentration (PM). The data are collected from the Air Quality System, which contains ~4,000 monitoring stations in all 50 states, primarily located in urban areas. The particulate matter concentrations are presented in several ways, including the number of days measured PM was above a standard threshold as well as the average particulate matter concentration over a given year at both the state and county level. In order to optimize interpretability, average particulate matter concetration over the year at the state level was used in this study. Data from 1999 to 2013 was included due to incomplete data beyond 2013.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+respfireairqual %>% filter(year %in% c(2000,2004,2008,2012)) %>% filter(state != "United States") %>% mutate(state = reorder(state,avgpm, FUN = median)) %>% 
+  ggplot() +
+  geom_col(aes(state,avgpm,fill=region)) +
+  theme(axis.text.x = element_text(angle = 90), panel.background = element_rect(fill = NA)) +
+  facet_grid(year~.) +
+  xlab("State") +
+  ylab("Average yearly PM concentration") +
+  ggtitle("Average yearly PM Concentrate by state in 2000, 2004, 2008, & 2012")
+
+```
+
+Similar to other measures of factors associated with climate change, the majority of the states at the higher end of PM are in the South region. However, in contrast to the other measures, the Western states have the lowest PM across the years shown and states in the North Central and Northeast regions fall along the entire spectrum. 
+
+### Modeling the Modification of Regional Effects on Chronic Lower Respiratory Disease Mortality by Factors Associated with Climate Change
+
+In the previous section, I aimed to establish that:
+
+1) There are regional differences in the trend of chronic lower respiratory disease mortality.
+2) There is some heterogeneity in the factors associated with climate change, namely wildfires, drought severity, and air quality.
+3) Despite the heterogeneity, these data suggest that the states in the South and West regions are the most affected by these factors.
+
+While these findings have separate indications, I aim to investigate and model the modification that the factors associated with climiate change have on the regional differences in chronic lower respiratory disease mortality. 
+
+#### Model building
+
+In order to investigate the effect modification of each factor associated with climate change on the regional effects on chronic lower respiratory disease mortality, a linear model was used with age-adjusted death rate as the outcome and the product of the climate change factor and region as the predictor variable. The climate change factor and region were automatically included as covariates. Smoking rate by state was also included, as smoking has a well-established effect on chronic lower respiratory disease mortality and there are known regional differences in smoking rates. Smoking rates used were from 2018 for all models, since yearly smoking rates were not readily available.
+
+(Note: Multiple linear models stratified by year were used since longitudinal analysis is beyond the scope this course and my skillset)
+
+
+#### The effect of wildfires on the regional effects on chronic lower respiratory disease death rates
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Filter years for wildfires since using all years/missing values breaks do/tidy
+wildfiredeath <- respfireairqual %>% filter(year %in% 2009:2017) %>% select(year,region,deathrate,wildfires,acres,smoking)
+wildfiredeath <- na.omit(wildfiredeath)
+
+#Graph effect estimates over time for wildfires
+wildfiredeath %>% group_by(year) %>% 
+  do(tidy(lm(deathrate ~ wildfires*factor(region) + smoking, data=.))) %>% 
+  select(year,term,estimate,p.value) %>% 
+  filter(term %in% c('wildfires:factor(region)West','wildfires:factor(region)South','wildfires:factor(region)North Central')) %>% 
+  mutate(term = recode(term, 'wildfires:factor(region)West'='West','wildfires:factor(region)South'='South','wildfires:factor(region)North Central'='North Central')) %>% 
+  rename("Region" = term) %>% 
+  ggplot() +
+  geom_smooth(aes(year,estimate,color=Region)) +
+  scale_x_continuous(breaks=c(2009,2010,2011,2012,2013,2014,2015,2016,2017,2018)) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Estimate (beta)") +
+  ggtitle("Estimates of effect modification: wildfires on the region")
+
+```
+
+The figure above shows the estimates of the effect modification of the number of wildfires on the regional effect on chronic lower respiratory disease death rates. While the overall effect is small (~0.005 per 100,000), the effect was significant when comparing the South and West regions to the reference region, the Northeast. 
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+wildfiredeath %>% group_by(year) %>% 
+  do(tidy(lm(deathrate ~ acres*factor(region) + smoking, data=.))) %>% 
+  select(year,term,estimate,p.value) %>% 
+  filter(term %in% c('acres:factor(region)West','acres:factor(region)South','acres:factor(region)North Central')) %>% 
+  mutate(term = recode(term, 'acres:factor(region)West'='West','acres:factor(region)South'='South','acres:factor(region)North Central'='North Central')) %>% 
+  rename("Region" = term) %>% 
+  ggplot() +
+  geom_smooth(aes(year,estimate,color=Region)) +
+  scale_x_continuous(breaks=c(2009,2010,2011,2012,2013,2014,2015,2016,2017,2018)) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Estimate (beta)") +
+  ggtitle("Estimates of effect modification: acres burned on region")
+
+```
+
+In contrast, when the number of acres burned is used instead of the number of wildfires, there is no significant effect between any of the regions and the reference region, the Northeast. In fact, there appears to be no difference between the effect of any of the regions given the almost overlapping lines.
+
+
+#### The effect of drought severity on the regional effects on chronic lower respiratory disease death rates
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Filter years for drought severity and air quality since using all years/missing values breaks do/tidy
+airqualdeath <- respfireairqual %>% filter(year %in% 1999:2013) %>% 
+  select(year,region,deathrate,avgpm,yearPDSI,smoking)
+airqualdeath <- na.omit(airqualdeath)
+
+#Graph effect estimates over time for drought severity
+airqualdeath %>% group_by(year) %>% 
+  do(tidy(lm(deathrate ~ yearPDSI*factor(region) + smoking, data=.),conf.int = TRUE)) %>% 
+  select(year,term,estimate,p.value) %>% 
+  filter(term %in% c(c('yearPDSI:factor(region)West','yearPDSI:factor(region)South','yearPDSI:factor(region)North Central'))) %>% 
+  mutate(term = recode(term, 'yearPDSI:factor(region)West'='West','yearPDSI:factor(region)South'='South','yearPDSI:factor(region)North Central'='North Central')) %>% 
+  rename("Region" = term) %>% 
+  ggplot() +
+  geom_smooth(aes(year,estimate,color=Region)) +
+  scale_x_continuous(breaks=1999:2013) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Estimate (beta)") +
+  ggtitle("Estimates of effect modification: PDSI on region")
+
+```
+
+The figure above shows the estimates of the effect modification of the PDSI on the regional effect on chronic lower respiratory disease death rates. While the differences in effect were larger, the effect modification of PDSI was not statistically significant in any of the regions compared to the reference region. 
+
+
+#### The effect of air quality on the regional effects on chronic lower respiratory disease death rates
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+airqualdeath %>% group_by(year) %>% 
+  do(tidy(lm(deathrate ~ avgpm*factor(region) + smoking, data=.),conf.int = TRUE)) %>% 
+  select(year,term,estimate,p.value) %>% 
+  filter(term %in% c(c('avgpm:factor(region)West','avgpm:factor(region)South','avgpm:factor(region)North Central'))) %>% 
+  mutate(term = recode(term, 'avgpm:factor(region)West'='West','avgpm:factor(region)South'='South','avgpm:factor(region)North Central'='North Central')) %>% 
+  rename("Region" = term) %>% 
+  ggplot() +
+  geom_smooth(aes(year,estimate,color=Region)) +
+  scale_x_continuous(breaks=1999:2013) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Estimate (beta)") +
+  ggtitle("Estimates of effect modification: PM on region")
+
+```
+
+Finally, the figure above shows the estimates of the effect modification of PM/air quality on the regional effect on chronic lower respiratory disease death rates. Similar to the effect modification of PDSI, the effect differences for PM were larger than the wildfire measures. However, compared to PDSI, the effect differences for PM comparing each region to the reference region were all statistically significant. 
+
+## Conclusions
