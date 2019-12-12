@@ -5,6 +5,14 @@ output: html_document
 
 Final project for BST260 Fall 2019 by Auyon Ghosh, MD
 
+Contact:
+
+auyon.ghosh@gmail.com
+
+[Twitter](https://twitter.com/ajghosh)
+
+## Screencast
+
 ## Overview
 
 ### Introduction
@@ -362,3 +370,9 @@ airqualdeath %>% group_by(year) %>%
 Finally, the figure above shows the estimates of the effect modification of PM/air quality on the regional effect on chronic lower respiratory disease death rates. Similar to the effect modification of PDSI, the effect differences for PM were larger than the wildfire measures. However, compared to PDSI, the effect differences for PM comparing each region to the reference region were all statistically significant. 
 
 ## Conclusions
+
+The goal of this project was to explore the differences in the effect of factors related to climate change in different regions over time on chronic lower respiratory disease mortality. In other words, the objective was to evaluate how factors related to climate change modify regional effects on chronic lower respiratory disease death rates. There were clear regional differences between death rates, wildfires, drought severity, and air quality. However, only the number of wildfires showed evidence of modifying regional effects on chronic lower respiratory disease death rates. 
+
+The findings from this study suggest that while there are clear regional differences in chronic lower respiratory disease death rates and clear regional differences in factors related to climate change, at the least the number of wildfires in the South and West regions have different effects when compared to the Northeast region on the chronic lower respiratory disease death rate. These findings could help inform further research as well as public and health policy decisions.
+
+There are several limitations to the present study. First, the study may be somewhat underpowered. I used only publicly available datasets, which limited the number of years with complete data. In addition, it may be more relevant to study healthcare utilization or respiratory exacerbations given they are more common events than mortality. Second, I used multiple linear models for analyses over time, whereas longitudinal analysis would have been more appropriate. Finally, while linear models were adjusted for smoking rates, there are likely other confounders that may improve the model validity. More research is needed to further establish these exploratory findings.
