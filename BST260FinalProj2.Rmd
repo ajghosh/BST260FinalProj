@@ -13,6 +13,8 @@ auyon.ghosh@gmail.com
 
 ## Screencast
 
+[Watch on Youtube](https://youtu.be/5BQW1v-ikUA)
+
 ## Overview
 
 ### Introduction
@@ -26,7 +28,9 @@ The goal of this project is not to associate factors related to climate change, 
 Study questions:
 
 •	Over the last several years, many states in the western US have been plagued by drought conditions that have led to wildfires. Do droughts themselves lead to worse outcomes related to chronic lung diseases?
+
 •	Have wildfires led to worse outcomes related to chronic lung diseases in these states (relative to unaffected states)? In neighboring states/in these regions?
+
 •	Pollution has increased as well. Do states with more pollution/worse air quality have worse outcomes related to chronic lung diseases? 
 
 ### Datasets
